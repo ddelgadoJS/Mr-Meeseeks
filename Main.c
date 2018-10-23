@@ -30,12 +30,10 @@ float getRandomNumber(float minNum, float maxNum)
     return value;
 }
 
-pid_t createFork(int N, int i, char * job) {
-    int pipefds[2];
-    int returnstatus;
+pid_t createFork(int N, int i, char job[100]) {
+    int pipefds[2], returnstatus;
     int pid = 0;
-    char * writemessages[2] = {job, job};
-    char * readmessage;
+    char *readmessage;
     returnstatus = pipe(pipefds);
     if (returnstatus == -1) {
       printf("Unable to create pipe\n");
@@ -49,31 +47,28 @@ pid_t createFork(int N, int i, char * job) {
         return pid;
     }
     else if (pid == 0) { // Child process
-        printf("Hi I'm Mr Meeseeks! Look at Meeeee. (%d, %d, %d, %d)\n",
+        printf("\nHi I'm Mr Meeseeks! Look at Meeeee. (%d, %d, %d, %d)",
             getpid(), getppid(), N, i);
 
         sleep(1);
 
-        read(pipefds[0], readmessage, sizeof(readmessage));
-        printf("Child Process - Reading from pipe - Job is %s\n", readmessage);
+        read(pipefds[0], &readmessage, sizeof(readmessage));
+        printf("\nChild Process - Reading from pipe - Job is %s", readmessage);
         return pid;
     }
     else { //Parent process
-        printf("Parent Process - Writing to pipe - Job is %s\n", job);
-        write(pipefds[1], writemessages, sizeof(writemessages));
+        printf("\nParent Process - Writing to pipe - Job is %s", job);
+        write(pipefds[1], &job, sizeof(&job));
         return pid;
     }
 }
 
 int main ()
 {
-    char *job, *difficultyStr;
+    char job[100], difficultyStr[100];
     float difficulty, time;
-    int N = 1, i = 1; // Is this 1 or 2 for the first fork?
+    int N = 0, i = 0;
     pid_t pidChild;
-
-    job = malloc(sizeof(500));
-    difficultyStr = malloc(sizeof(500));
 
     printf("%s\n%s\n",
            "** Welcome to the Mr. Meeseeks Box **",
@@ -86,7 +81,7 @@ int main ()
     fgets(difficultyStr, sizeof(difficultyStr), stdin);
 
     // Defining difficulty
-    if (difficultyStr[0] != '\n') 
+    if (difficultyStr[0] != '\n')
         difficulty = atof(difficultyStr);
     else
         difficulty = getRandomNumber(0, 100);
