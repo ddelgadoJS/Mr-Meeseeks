@@ -31,7 +31,6 @@ float getRandomNumber(float minNum, float maxNum)
     } while( rsq >= 1. || rsq == 0. );
     
     f = sqrt( -2.0 * log(rsq) / rsq );
-
     // (x * f) is a number between [-3, 2.9]
     // (x * f) + 3 to get a number between [0, 5.9]
     // ((x * f) + 3) * 100 / 5.9 to get a number between [0, 100]
@@ -42,27 +41,7 @@ float getRandomNumber(float minNum, float maxNum)
     return value;
 }
 
-// int getNumberOfChildren(int &level, int &I, float difficulty){
-//     int numberOfChildren;
-//     switch(difficulty) {
-//         case difficulty < REQDIFLEVEL2:
-//             maxNumChildren = 2;
-//             numberOfChildren = getRandomNumber(0, maxNumChildren) * normalProbabilty(MIU, SIGMA, 1);
-//             level = level+1;
-//             I = 2;
-//         case REQDIFLEVEL2 > difficulty > REQDIFLEVEL1:
-//             maxNumChildren = 1;
-//             numberOfChildren = getRandomNumber(0, maxNumChildren) * normalProbabilty(MIU, SIGMA, 1);
-//             level = level+1;
-//             I = 1;
-//         default:
-//             maxNumChildren = 0;
-//             numberOfChildren = 0;
-//     }
-//     return numberOfChildren;
-// } 
-
-// Based on: http://cypascal.blogspot.com/2016/02/crear-una-distribucion-normal-en-c.html
+//Base on: http://cypascal.blogspot.com/2016/02/crear-una-distribucion-normal-en-c.html
 float normalProbabilty(float miu, float sigma, int range){
     srand(time(NULL));  //Reset the random seed
     int i = 1; float aux;
@@ -72,10 +51,26 @@ float normalProbabilty(float miu, float sigma, int range){
     return fabs(sigma * sqrt((float)12/CK) * (aux - (float)CK/2) + miu) * range;
 }
 
-pid_t createFork(int N, int i, char job[100]) {
+int getNumberOfChildren(int *level, int *I, float difficulty){
+    int numberOfChildren = 0, maxNumChildren;
+    if (difficulty < REQDIFLEVEL2){
+        maxNumChildren = 2;
+        numberOfChildren = getRandomNumber(0, maxNumChildren) * normalProbabilty(MIU, SIGMA, 1);
+        *level = *level+1;
+        *I = 2;
+    }else if (difficulty < REQDIFLEVEL1){
+        maxNumChildren = 1;
+        numberOfChildren = getRandomNumber(0, maxNumChildren) * normalProbabilty(MIU, SIGMA, 1);
+        *level = *level+1;
+        *I = 1;
+    }
+    return numberOfChildren;
+} 
+
+pid_t createFork(int N, int i, char * job) {
     int pipefds[2], returnstatus;
     int pid = 0;
-    char *readmessage;
+    char * readmessage;
     returnstatus = pipe(pipefds);
     if (returnstatus == -1) {
       printf("Unable to create pipe\n");
@@ -84,7 +79,7 @@ pid_t createFork(int N, int i, char job[100]) {
 
     pid = fork();
 
-    if (pid < 0) {
+    if (pid < 0) { // Error
         fprintf(stderr, "Fork Failed\n");
         return pid;
     }
@@ -107,10 +102,13 @@ pid_t createFork(int N, int i, char job[100]) {
 
 int main ()
 {
-    char job[100], difficultyStr[100];
+    char *job, *difficultyStr;
     float requestDifficulty, time, requestCompleteness = 0.0;
-    int maxNumChildren, N = 0, i = 0, numChildren;
+    int maxNumChildren, N = 1, i = 1, numChildren; // Is this 1 or 2 for the first fork?
     pid_t pidChild;
+
+    job = malloc(sizeof(500));
+    difficultyStr = malloc(sizeof(500));
 
     printf("%s\n%s\n",
            "** Welcome to the Mr. Meeseeks Box **",
@@ -133,16 +131,18 @@ int main ()
     time = getRandomNumber(MINTIMEREQ, MAXTIMEREQ); //Get the wait's time for the main fork
     pidChild = createFork(N, i, job);   //Create the main fork
 
-    // while(requestCompleteness < maxCompleteness || time < MAXTIME) {
-    //     if(!pidChild) { //If the fork hasn't child
-    //         numChildren = getNumberOfChildren(N, i, requestDifficulty); //Get the number of children
-    //         int i = 0;
-    //         for(i; i < numChildren; i++){   //Create the number of children
-    //             pidChild = createFork(N, i, job);
+    while(requestCompleteness < MAXCOMPLETENESS || time < MAXTIME) {
+        if(!pidChild) { //If the fork hasn't child
+            numChildren = getNumberOfChildren(&N, &i, requestDifficulty); //Get the number of children
+            int i = 0;
+            for(i; i < numChildren; i++){   //Create the number of children
+                pidChild = createFork(N, i, job);
+            }
+        } 
+    }
+    
 
-    //         }
-    //     } 
-    // }
+    //printf("Child %d, Father %d\n", getpid(), getppid());
 
     if (pidChild != 0) waitpid(pidChild, NULL, 0);
 
