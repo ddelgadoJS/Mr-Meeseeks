@@ -25,26 +25,6 @@
 #define REQDIFLEVEL2 45.0   ////Minimum number for the level 2 of difficulty [45.0 to 85.0]
 #define SIGMA 1 //Sigma Parameter for the normal distribution
 
-void *threadFunction(void *dummyPtr);
-
-pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
-float p = 0.0;
-
-char job[100], difficultyStr[100];
-float requestDifficulty, localWaitTime;
-int maxNumChildren, N = 0, i = 0, numChildren;
-pthread_t thread_id;
-
-int fd[2]; //File descriptor for creating a pipe
-
-/*** Time variables initialization ***/
-time_t startTime, currentTime, localTime1, localTime2;
-struct tm *startStruct;
-struct tm currentStruct;
-struct tm localTime1Struct;
-struct tm localTime2Struct;
-char buffer[160];
-/*** End of time initialization ***/
 
 // Normal random numbers generator - Marsaglia algorithm.
 float getNormalProbNum(float minNum, float maxNum){
@@ -93,106 +73,87 @@ int getNumberOfChildren(int *level, int *I, float difficulty){
     return numberOfChildren;
 } 
 
-void append(char* s, char c)
-{
-        int len = strlen(s);
-        s[len] = c;
-        s[len+1] = '\0';
+pid_t createFork(int N, int i, char job[100]){
+    int pipefds[2], returnstatus, pid = 0;
+    char *readmessage;
+    char *testmessage;
+    returnstatus = pipe(pipefds);
+    if (returnstatus == -1) {
+      printf("Unable to create pipe\n");
+      return pid;
+    }
+
+    pid = fork();
+
+    if (pid < 0) {
+        fprintf(stderr, "Fork Failed\n");
+    }
+    else if (pid == 0) { // Child process
+        printf("\nHi I'm Mr Meeseeks! Look at Meeeee. (%d, %d, %d, %d)",
+            getpid(), getppid(), N, i);
+
+        //sleep(1);
+
+        read(pipefds[0], &readmessage, sizeof(readmessage));
+        printf("\nChild Process - Reading from pipe - Job is %s", readmessage);
+    }
+    else { //Parent process
+        printf("\nParent Process - Writing to pipe - Job is %s", job);
+        write(pipefds[1], &job, sizeof(&job));
+    }
+
+    return pid;
 }
 
-void *reader()
-{
-    char ch = ' ', stCh[100] = "Child Process - Reading from pipe - Job is ";
+void taskCompleted(pid_t MeeseeksWhoFinished, pid_t originalMeeseeks) {
 
-    while(ch != '\n'){
-        read (fd[0], &ch, 1);
-        append(stCh, ch);
-    }
-    
-    printf("%s\n", stCh);
-    threadFunction(stCh);
-}
-
-void *writer(int N, int i, char job[100])
-{
-   int result;
-   char *ch=job;
-
-   printf("Parent Process - Writing to pipe - Job is %s\n", job);
-
-   while(1){
-        // printf("Parent Process - Writing to pipe - Char is %c\n", *ch);
-        if (write (fd[1], &*ch, 1) != 1){
-            perror ("write");
-            exit (2);
-        }
-
-        ch++;
-
-        if (*ch == '\n') {
-            // printf("Parent Process - Writing to pipe - Char is %c\n", *ch);
-            if (write (fd[1], &*ch, 1) != 1){
-                perror ("write");
-                exit (2);
-            }
-            break;
-        }
-    }
-}
-
-void *threadFunction(void *dummyPtr) {
-    /** Defines the start time **/
-    time(&startTime); 
-    startStruct = localtime(&startTime); 
-
-    /** Defines current time for all processess **/
-    currentTime = time(NULL);
-    currentStruct = *((struct tm*)localtime(&currentTime));
-
-    /*** Solving and creating children***/
-    while(p < MAXCOMPLETENESS && difftime(currentTime, startTime) < MAXTIME){
-        localWaitTime = getNormalProbNum(MINTIMEREQ, MAXTIMEREQ);
-        
-        localTime1 = time(NULL);
-        localTime1Struct = *((struct tm*)localtime(&localTime1));
-
-        while (p < MAXCOMPLETENESS && difftime(localTime2, localTime1) < localWaitTime) {
-            pthread_mutex_lock( &mutex1 );
-            //printf ("Mr. Meeseeks(%d) is trying to solve the task.\n", getpid());
-            sleep (0.5); // This sleeps seems to be necessary for the synchronization
-            p += requestDifficulty * normalProbabilty(MIU, SIGMA, 1);
-            printf ("Mr. Meeseeks(%lu) newvalue of *p=%f.\n", pthread_self(), p);
-
-            // HERE MUST GO THE MEESEEKS THAT FINISHED THE TASK
-            pthread_mutex_unlock( &mutex1 );
-
-            currentTime = time(NULL);
-            currentStruct = *((struct tm*)localtime(&currentTime));
-
-            localTime2 = time(NULL);
-            localTime2Struct = *((struct tm*)localtime(&localTime2));
-        }
-
-        if(p < MAXCOMPLETENESS){
-            //if(!pidChild){ // If the fork doesn't have a child
-                numChildren = getNumberOfChildren(&N, &i, requestDifficulty); // Get number of children to create
-                N++;
-                for(i = 0; i < numChildren; i++){ // Create children
-                    if (pipe(fd) < 0){
-                        perror("pipe ");
-                        exit(1);
-                    }
-
-                    pthread_create(&thread_id, NULL, reader, NULL);
-                    writer(N, i, job);
-                }
-            //}
-        } else break;
-    }
 }
 
 int main ()
 {
+    char job[100], difficultyStr[100];
+    float requestDifficulty, localWaitTime;
+    int maxNumChildren, N = 0, i = 0, numChildren;
+    pid_t originalProcess = getpid(), originalFather = getppid();
+
+    /*** Time variables initialization ***/
+    time_t startTime, currentTime, localTime1, localTime2;
+    struct tm *startStruct;
+    struct tm currentStruct;
+    struct tm localTime1Struct;
+    struct tm localTime2Struct;
+    char buffer[160];
+    /*** End of time initialization ***/
+
+    /*** Allocating shared memory ***/
+    key_t shmkey; // Shared memory key
+    int shmid; // Shared memory id
+    sem_t *sem; // Synch semaphore (shared)
+    pid_t pidChild = 0; // Fork pid
+    float *p; // Shared variable (shared)
+    unsigned int value = 1; // Semaphore value
+
+    /* Initialize shared variables in shared memory */
+    shmkey = ftok ("/dev/null", 5);
+    shmid = shmget (shmkey, sizeof (int), 0644 | IPC_CREAT);
+    if (shmid < 0) { // Shared memory error check
+        perror ("shmget\n");
+        exit (1);
+    }
+
+    // Initialize semaphores for shared processes
+    sem = sem_open ("pSem", O_CREAT | O_EXCL, 0644, value); 
+    // Name of semaphore is "pSem", semaphore is reached using this name
+    sem_unlink ("pSem");      
+    // Unlink prevents the semaphore existing forever
+    // if a crash occurs during the execution
+    //printf ("semaphores initialized.\n\n");
+
+    p = (float *) shmat (shmid, NULL, 0); // Attach p to shared memory
+    *p = 0;
+    /*** Finished allocating shared memory ***/
+
+
     /*** Receiving input ***/
     printf("%s\n%s\n",
            "** Welcome to the Mr. Meeseeks Box **",
@@ -208,17 +169,57 @@ int main ()
     /** Defining difficulty **/
     if (difficultyStr[0] != '\n') requestDifficulty = atof(difficultyStr);
     else requestDifficulty = getNormalProbNum(0, 100);
-
+    
     printf ("Task's difficulty is: %f.\n", requestDifficulty);
     printf("-----------------------------------------------------------------------\n");
 
-    pthread_create(&thread_id, NULL, threadFunction, NULL);
+    /** Defines the start time **/
+    time(&startTime); 
+    startStruct = localtime(&startTime); 
 
-    pthread_join( thread_id, NULL);
+    pidChild = createFork(N, i, job); // Create main fork
 
+    /** Defines current time for all processess **/
+    currentTime = time(NULL);
+    currentStruct = *((struct tm*)localtime(&currentTime));
+
+    /*** Solving and creating children***/
+    while(*p < MAXCOMPLETENESS && difftime(currentTime, startTime) < MAXTIME){
+        localWaitTime = getNormalProbNum(MINTIMEREQ, MAXTIMEREQ);
+        
+        localTime1 = time(NULL);
+        localTime1Struct = *((struct tm*)localtime(&localTime1));
+
+        while (*p < MAXCOMPLETENESS && difftime(localTime2, localTime1) < localWaitTime) {
+            sem_wait (sem);
+            //printf ("Mr. Meeseeks(%d) is trying to solve the task.\n", getpid());
+            sleep (0.5); // This sleeps seems to be necessary for the synchronization
+            *p += requestDifficulty * normalProbabilty(MIU, SIGMA, 1);
+            printf ("Mr. Meeseeks(%d) newvalue of *p=%f.\n", getpid(), *p);
+
+            // HERE MUST GO THE MEESEEKS THAT FINISHED THE TASK
+            sem_post (sem);
+
+            currentTime = time(NULL);
+            currentStruct = *((struct tm*)localtime(&currentTime));
+
+            localTime2 = time(NULL);
+            localTime2Struct = *((struct tm*)localtime(&localTime2));
+        }
+
+        if(*p < MAXCOMPLETENESS){
+            if(!pidChild){ // If the fork doesn't have a child
+                numChildren = getNumberOfChildren(&N, &i, requestDifficulty); // Get number of children to create
+                N++;
+                for(i = 0; i < numChildren; i++){ // Create children
+                    pidChild = createFork(N, i, job);
+                }
+            }
+        } else break;
+    }
     /*** Problem solved or limit time reached ***/
     
-    /*if (pidChild != 0) {
+    if (pidChild != 0) {
         // Wait for all children to exit
         while (pidChild = waitpid (-1, NULL, 0)){
             if (errno == ECHILD)
@@ -255,7 +256,7 @@ int main ()
         // Say goodbye and destroy Meeseeks
         printf("\nMr. Meeseeks %d died :)\n", getpid());
         kill(getpid(), SIGKILL);
-    }*/
+    }
 
     return 0;
 }
