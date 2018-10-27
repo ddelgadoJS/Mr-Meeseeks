@@ -232,7 +232,8 @@ int main ()
             currentTime = time(NULL);
             currentStruct = *((struct tm*)localtime(&currentTime));
 
-            printf("%s\n", "The task was completed :)");
+            if (*p >= 100) printf("%s\n", "The task was completed :)");
+            else printf("%s (%f%c)\n", "The task couldn't be completed :(", *p, '%');
             printf("Execution time: %f\n", difftime(currentTime, startTime));
         }
 

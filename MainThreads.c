@@ -141,10 +141,6 @@ void *writer(int N, int i, char job[100])
 }
 
 void *threadFunction(void *dummyPtr) {
-    /** Defines the start time **/
-    time(&startTime); 
-    startStruct = localtime(&startTime); 
-
     /** Defines current time for all processess **/
     currentTime = time(NULL);
     currentStruct = *((struct tm*)localtime(&currentTime));
@@ -205,6 +201,10 @@ int main ()
     fgets(difficultyStr, sizeof(difficultyStr), stdin);
     /*** Finished receiving input ***/
 
+    /** Defines the start time **/
+    time(&startTime); 
+    startStruct = localtime(&startTime); 
+
     /** Defining difficulty **/
     if (difficultyStr[0] != '\n') requestDifficulty = atof(difficultyStr);
     else requestDifficulty = getNormalProbNum(0, 100);
@@ -215,6 +215,9 @@ int main ()
     pthread_create(&thread_id, NULL, threadFunction, NULL);
 
     pthread_join( thread_id, NULL);
+    
+    printf("%s\n", "The task was completed :)");
+    printf("Execution time: %f\n", difftime(currentTime, startTime));
 
     /*** Problem solved or limit time reached ***/
     
